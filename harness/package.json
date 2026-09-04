@@ -1,0 +1,21 @@
+{
+  "name": "agent-platform-harness",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "setup:zitadel": "tsx zitadel-setup.ts",
+    "test:stack": "tsx tests/run.ts",
+    "compare": "tsx scripts/compare.ts",
+    "use-stack": "tsx scripts/use-stack.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "jose": "6.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "24.3.0",
+    "playwright": "^1.62.1",
+    "tsx": "4.20.5",
+    "typescript": "5.9.2"
+  }
+}

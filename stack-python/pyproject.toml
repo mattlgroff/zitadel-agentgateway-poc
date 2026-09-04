@@ -1,0 +1,22 @@
+[project]
+name = "stack-python"
+version = "0.1.0"
+requires-python = ">=3.13,<3.14"
+dependencies = [
+  "fastapi==0.116.1",
+  "httpx==0.28.1",
+  "mcp==2.1.1",
+  "pydantic-ai-slim[openai,temporal,ui]==2.38.0",
+  "PyJWT[crypto]==2.10.1",
+  "uvicorn[standard]==0.35.0",
+]
+
+[project.optional-dependencies]
+test = ["pytest==8.4.2", "pytest-asyncio==1.1.0"]
+
+[tool.setuptools.packages.find]
+include = ["app*"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

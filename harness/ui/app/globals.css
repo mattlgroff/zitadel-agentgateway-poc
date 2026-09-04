@@ -1,0 +1,8 @@
+@import "tailwindcss";
+@source "../node_modules/streamdown/dist/*.js";
+
+:root { color-scheme: dark; --background: #0d0f12; --foreground: #f3f4f6; --card: #15191e; --card-foreground: #f3f4f6; --popover: #15191e; --popover-foreground: #f3f4f6; --primary: #d8ff65; --primary-foreground: #10120c; --secondary: #222831; --secondary-foreground: #f3f4f6; --muted: #222831; --muted-foreground: #9ca3af; --accent: #292f37; --accent-foreground: #f3f4f6; --destructive: #ef4444; --border: #30363d; --input: #30363d; --ring: #d8ff65; --radius: 0.75rem; }
+* { border-color: var(--border); }
+body { margin: 0; background: var(--background); color: var(--foreground); font-family: var(--font-geist), sans-serif; }
+button, input, textarea { font: inherit; }
+

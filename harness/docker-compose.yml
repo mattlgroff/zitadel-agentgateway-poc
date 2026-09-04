@@ -1,0 +1,257 @@
+name: agent-platform-harness
+
+services:
+  proxy:
+    image: traefik:v3.7.7
+    restart: unless-stopped
+    command:
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --providers.docker.network=harness
+      - --entrypoints.web.address=:80
+      - --ping=true
+      - --ping.entrypoint=web
+    ports:
+      - "8080:80"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    healthcheck:
+      test: [CMD, wget, -qO-, http://127.0.0.1/ping]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks: [harness]
+    depends_on:
+      zitadel: { condition: service_healthy }
+      zitadel-login: { condition: service_healthy }
+
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: zitadel
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U postgres -d zitadel"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks: [harness]
+
+  zitadel:
+    image: ghcr.io/zitadel/zitadel:v4.17.2
+    restart: unless-stopped
+    user: "0"
+    command: start-from-init --masterkey "${ZITADEL_MASTERKEY:-MasterkeyNeedsToHave32Characters}"
+    environment:
+      ZITADEL_PORT: 8080
+      ZITADEL_EXTERNALDOMAIN: localhost
+      ZITADEL_EXTERNALPORT: 8080
+      ZITADEL_EXTERNALSECURE: "false"
+      ZITADEL_TLS_ENABLED: "false"
+      ZITADEL_DATABASE_POSTGRES_DSN: postgresql://postgres:${POSTGRES_PASSWORD:-postgres}@postgres:5432/zitadel?sslmode=disable
+      ZITADEL_FIRSTINSTANCE_ORG_HUMAN_PASSWORD: ${ADMIN_PASSWORD:-Password1!}
+      ZITADEL_FIRSTINSTANCE_ORG_HUMAN_PASSWORDCHANGEREQUIRED: "false"
+      ZITADEL_FIRSTINSTANCE_PATPATH: /zitadel/bootstrap/admin.pat
+      ZITADEL_FIRSTINSTANCE_ORG_MACHINE_MACHINE_USERNAME: harness-admin
+      ZITADEL_FIRSTINSTANCE_ORG_MACHINE_MACHINE_NAME: Harness Admin
+      ZITADEL_FIRSTINSTANCE_ORG_MACHINE_PAT_EXPIRATIONDATE: "2099-01-01T00:00:00Z"
+      ZITADEL_FIRSTINSTANCE_LOGINCLIENTPATPATH: /zitadel/bootstrap/login-client.pat
+      ZITADEL_FIRSTINSTANCE_ORG_LOGINCLIENT_MACHINE_USERNAME: login-client
+      ZITADEL_FIRSTINSTANCE_ORG_LOGINCLIENT_MACHINE_NAME: Login Client
+      ZITADEL_FIRSTINSTANCE_ORG_LOGINCLIENT_PAT_EXPIRATIONDATE: "2099-01-01T00:00:00Z"
+      ZITADEL_DEFAULTINSTANCE_FEATURES_LOGINV2_REQUIRED: "true"
+      ZITADEL_DEFAULTINSTANCE_FEATURES_LOGINV2_BASEURI: http://localhost:8080/ui/v2/login/
+      ZITADEL_OIDC_DEFAULTLOGINURLV2: http://localhost:8080/ui/v2/login/login?authRequest=
+      ZITADEL_OIDC_DEFAULTLOGOUTURLV2: http://localhost:8080/ui/v2/login/logout?post_logout_redirect=
+      ZITADEL_SAML_DEFAULTLOGINURLV2: http://localhost:8080/ui/v2/login/login?samlRequest=
+      ZITADEL_LOGSTORE_ACCESS_STDOUT_ENABLED: "true"
+    healthcheck:
+      test: [CMD, /app/zitadel, ready]
+      interval: 5s
+      timeout: 10s
+      retries: 30
+      start_period: 20s
+    volumes:
+      - ./data/bootstrap:/zitadel/bootstrap
+    networks: [harness]
+    depends_on:
+      postgres: { condition: service_healthy }
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=harness
+      - traefik.http.services.zitadel.loadbalancer.server.port=8080
+      - traefik.http.services.zitadel.loadbalancer.server.scheme=h2c
+      - traefik.http.routers.zitadel.rule=Host(`localhost`) && !PathPrefix(`/ui/v2/login`) && !Path(`/`)
+      - traefik.http.routers.zitadel.entrypoints=web
+      - traefik.http.routers.zitadel.priority=100
+      - traefik.http.middlewares.zitadel-internal-host.headers.customrequestheaders.Host=localhost:8080
+      - traefik.http.middlewares.zitadel-internal-host.headers.customrequestheaders.X-Forwarded-Host=localhost:8080
+      - traefik.http.middlewares.zitadel-internal-host.headers.customrequestheaders.X-Forwarded-Proto=http
+      - traefik.http.routers.zitadel-internal.rule=Host(`proxy`)
+      - traefik.http.routers.zitadel-internal.entrypoints=web
+      - traefik.http.routers.zitadel-internal.middlewares=zitadel-internal-host
+      - traefik.http.routers.zitadel-internal.priority=90
+
+  zitadel-login:
+    image: ghcr.io/zitadel/zitadel-login:v4.17.2
+    restart: unless-stopped
+    user: "0"
+    environment:
+      ZITADEL_API_URL: http://zitadel:8080
+      NEXT_PUBLIC_BASE_PATH: /ui/v2/login
+      ZITADEL_SERVICE_USER_TOKEN_FILE: /zitadel/bootstrap/login-client.pat
+      CUSTOM_REQUEST_HEADERS: Host:localhost,X-Forwarded-Proto:http
+    healthcheck:
+      test: [CMD-SHELL, "node /app/healthcheck.mjs http://localhost:3000/ui/v2/login/healthy"]
+      interval: 5s
+      timeout: 10s
+      retries: 30
+      start_period: 20s
+    volumes:
+      - ./data/bootstrap:/zitadel/bootstrap:ro
+    networks: [harness]
+    depends_on:
+      zitadel: { condition: service_healthy }
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=harness
+      - traefik.http.services.zitadel-login.loadbalancer.server.port=3000
+      - traefik.http.middlewares.zitadel-root.replacepath.path=/ui/v2/login/
+      - traefik.http.routers.zitadel-root.rule=Host(`localhost`) && Path(`/`)
+      - traefik.http.routers.zitadel-root.entrypoints=web
+      - traefik.http.routers.zitadel-root.middlewares=zitadel-root
+      - traefik.http.routers.zitadel-root.priority=400
+      - traefik.http.routers.zitadel-login.rule=Host(`localhost`) && PathPrefix(`/ui/v2/login`)
+      - traefik.http.routers.zitadel-login.entrypoints=web
+      - traefik.http.routers.zitadel-login.priority=250
+
+  ref-mcp:
+    build: ./ref-mcp
+    restart: unless-stopped
+    healthcheck:
+      test: [CMD, wget, -qO-, http://127.0.0.1:4300/health]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks: [harness]
+
+  agentgateway:
+    image: cr.agentgateway.dev/agentgateway:v1.5.0
+    restart: unless-stopped
+    command: ["-f", "/config/config.yaml"]
+    environment:
+      ZITADEL_PROJECT_ID: ${ZITADEL_PROJECT_ID}
+      ACTIVE_STACK_HOST: ${ACTIVE_STACK_HOST:-ref-mcp}
+      ACTIVE_STACK_PORT: ${ACTIVE_STACK_PORT:-4300}
+      GATEWAY_MODEL: ${GATEWAY_MODEL:-gpt-5.6-luna}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-replace-for-local-use-only}
+    volumes:
+      - ./agentgateway:/config:ro
+    ports:
+      - "3000:3000"
+      - "3001:3001"
+    healthcheck:
+      test: [CMD, /app/agentgateway, --version]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks: [harness, egress]
+    depends_on:
+      zitadel: { condition: service_healthy }
+      ref-mcp: { condition: service_healthy }
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.133.0
+    restart: unless-stopped
+    command: ["--config=/etc/otelcol/config.yaml"]
+    volumes:
+      - ./otel-collector.yaml:/etc/otelcol/config.yaml:ro
+    ports:
+      - "4317:4317"
+    networks: [harness]
+
+  broker:
+    build: ./broker
+    restart: unless-stopped
+    environment:
+      ZITADEL_EXTERNAL: http://localhost:8080
+      ZITADEL_INTERNAL: http://proxy
+      ZITADEL_PROJECT_ID: ${ZITADEL_PROJECT_ID}
+      ZITADEL_PLATFORM_ORG_ID: ${ZITADEL_PLATFORM_ORG_ID}
+      BROKER_ZITADEL_PAT: ${BROKER_ZITADEL_PAT}
+    ports:
+      - "4200:4200"
+    healthcheck:
+      test: [CMD, wget, -qO-, http://127.0.0.1:4200/health]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks: [harness]
+    depends_on:
+      zitadel: { condition: service_healthy }
+      proxy: { condition: service_healthy }
+
+  mock-cws:
+    build: ./mock-cws
+    restart: unless-stopped
+    ports:
+      - "4100:4100"
+    healthcheck:
+      test: [CMD, wget, -qO-, http://127.0.0.1:4100/health]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks: [harness]
+
+  temporal:
+    image: temporalio/temporal:1.8.3
+    restart: unless-stopped
+    command: [server, start-dev, --ip, 0.0.0.0, --ui-port, "8233"]
+    ports:
+      - "7233:7233"
+      - "8233:8233"
+    healthcheck:
+      test: [CMD, temporal, operator, cluster, health, --address, 127.0.0.1:7233]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    networks: [harness]
+
+  dts-emulator:
+    image: mcr.microsoft.com/dts/dts-emulator:latest
+    restart: unless-stopped
+    environment:
+      DTS_TASK_HUB_NAMES: default
+    ports:
+      - "8082:8082"
+    networks: [harness]
+
+  ui:
+    build:
+      context: ./ui
+      args:
+        NEXT_PUBLIC_STACK_URL: ${STACK_URL:-http://localhost:5000}
+        NEXT_PUBLIC_ZITADEL_ISSUER: http://localhost:8080
+        NEXT_PUBLIC_ZITADEL_CLIENT_ID: ${REFERENCE_CLIENT_ID}
+    restart: unless-stopped
+    ports:
+      - "3100:3100"
+    healthcheck:
+      test: [CMD, wget, -qO-, http://127.0.0.1:3100/]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    networks: [harness]
+
+networks:
+  harness:
+    name: harness
+  egress:
+    name: agent-egress
+
+volumes:
+  postgres-data:

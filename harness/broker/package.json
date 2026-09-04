@@ -1,0 +1,9 @@
+{
+  "name": "registration-broker",
+  "private": true,
+  "type": "module",
+  "scripts": { "build": "tsc", "start": "node dist/server.js" },
+  "dependencies": { "@hono/node-server": "1.19.1", "hono": "4.9.6" },
+  "devDependencies": { "@types/node": "24.3.0", "typescript": "5.9.2" }
+}
+

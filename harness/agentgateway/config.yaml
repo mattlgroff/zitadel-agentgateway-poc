@@ -1,0 +1,49 @@
+# yaml-language-server: $schema=https://agentgateway.dev/schema/config
+config:
+  logging:
+    format: json
+  tracing:
+    otlpEndpoint: http://otel-collector:4317
+    otlpProtocol: grpc
+    randomSampling: true
+    clientSampling: true
+
+gateways:
+  mcp-gateway:
+    port: 3000
+  llm-gateway:
+    port: 3001
+
+mcp:
+  gateways: [mcp-gateway]
+  policies:
+    cors:
+      allowOrigins: ["*"]
+      allowHeaders: ["*"]
+      exposeHeaders: [Mcp-Session-Id]
+    mcpAuthentication:
+      mode: strict
+      issuer: http://localhost:8080
+      audiences: ["$ZITADEL_PROJECT_ID"]
+      jwks:
+        url: http://proxy/oauth/v2/keys
+      resourceMetadata:
+        resource: http://localhost:3000/mcp
+        authorizationServers: [http://localhost:4200]
+        scopesSupported: [openid, profile, email]
+        bearerMethodsSupported: [header]
+    backendAuth:
+      passthrough: {}
+  targets:
+    - name: active-stack
+      mcp:
+        host: http://$ACTIVE_STACK_HOST:$ACTIVE_STACK_PORT/mcp
+
+llm:
+  gateways: [llm-gateway]
+  models:
+    - name: "*"
+      provider: openAI
+      params:
+        model: "$GATEWAY_MODEL"
+        apiKey: "$OPENAI_API_KEY"

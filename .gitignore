@@ -1,0 +1,8 @@
+*:Zone.Identifier
+harness/.env
+harness/data/
+harness/**/node_modules/
+harness/**/.next/
+harness/reports/
+harness/playwright-report/
+harness/test-results/

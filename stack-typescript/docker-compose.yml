@@ -1,0 +1,50 @@
+services:
+  stack-typescript:
+    build: .
+    environment:
+      ZITADEL_PROJECT_ID: ${ZITADEL_PROJECT_ID}
+      ACME_ORG_ID: ${ACME_ORG_ID}
+      GLOBEX_ORG_ID: ${GLOBEX_ORG_ID}
+      ADA_SUB: ${ADA_SUB}
+      MARGARET_SUB: ${MARGARET_SUB}
+      TEMPORAL_ADDRESS: temporal:7233
+      MOCK_CWS_URL: http://mock-cws:4100/graphql
+      GATEWAY_BASE_URL: http://agentgateway:3001/v1
+      GATEWAY_MODEL: gpt-5.6-luna
+      OPENAI_API_KEY: gateway
+    extra_hosts:
+      - "api.openai.com:127.0.0.1"
+    networks:
+      harness:
+        gw_priority: 1
+      agent-egress:
+        gw_priority: 0
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:5000/health').then(r=>{if(!r.ok)process.exit(1)})"]
+      interval: 3s
+      timeout: 2s
+      retries: 30
+
+  ingress:
+    image: stack-typescript-stack-typescript
+    command: ["node", "dist/src/relay.js"]
+    depends_on:
+      stack-typescript:
+        condition: service_healthy
+    ports:
+      - "5000:5000"
+    networks:
+      - harness
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:5000/health').then(r=>{if(!r.ok)process.exit(1)})"]
+      interval: 3s
+      timeout: 2s
+      retries: 30
+
+networks:
+  harness:
+    external: true
+  agent-egress:
+    external: true

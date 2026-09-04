@@ -1,0 +1,43 @@
+name: stack-dotnet
+
+services:
+  stack-dotnet:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    extra_hosts:
+      - "api.openai.com:127.0.0.1"
+    healthcheck:
+      test: [CMD, dotnet, StackDotnet.dll, --healthcheck]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    networks:
+      harness:
+        gw_priority: 1
+      agent-egress:
+        gw_priority: 0
+
+  ingress:
+    image: nginx:1.29-alpine
+    depends_on:
+      stack-dotnet:
+        condition: service_healthy
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    networks:
+      - harness
+    restart: unless-stopped
+    healthcheck:
+      test: [CMD, wget, -qO-, http://127.0.0.1:5000/health]
+      interval: 3s
+      timeout: 2s
+      retries: 30
+
+networks:
+  harness:
+    external: true
+  agent-egress:
+    external: true
