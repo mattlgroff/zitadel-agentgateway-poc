@@ -23,6 +23,13 @@ All identities, organizations, timesheets, and upstream records are synthetic. T
 
 Each implementation provides the same authenticated MCP tools and agent workflow. The shared test driver evaluates token validation, tenant and role scoping, streaming UI behavior, durable recovery, human approval, audit reconstruction, and shutdown behavior.
 
+## Durable conversation example
+
+The TypeScript [durable conversation sample](stack-typescript/src/conversations/README.md)
+demonstrates persistent approval waits, worker-process recovery, current authorization
+checks, separate application history and non-destructive context compaction.
+Its macOS smoke tests run local Temporal servers without Docker or model credentials.
+
 ## Prerequisites
 
 - Docker with Docker Compose
