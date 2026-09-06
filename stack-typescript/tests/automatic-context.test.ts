@@ -8,7 +8,7 @@ const response = (text: string) => ({
   usage: { inputTokens: { total: 100, noCache: 100, cacheRead: 0, cacheWrite: 0 }, outputTokens: { total: 20, text: 20, reasoning: 0 } },
   warnings: [],
 });
-const summary = "## Objective\nPrepare request.\n## Important Details\nApproval pending.\n## Work State\nNot purchased.\n## Next Move\nWait for approval.";
+const summary = "## Objective\nPrepare request.\n## Important Details\nApproval pending.\n## Work State\n### Completed\nLookup.\n### Active\nPreparation.\n### Blocked\nApproval.\n## Next Move\nWait for approval.\n## Relevant Files\n(none)";
 
 test("two automatic checkpoints use the previous summary and preserve all original records", async () => {
   let call = 0;
@@ -23,7 +23,9 @@ test("two automatic checkpoints use the previous summary and preserve all origin
     expect(JSON.stringify(context.history)).toBe(before);
   }
   expect(model.doGenerateCalls).toHaveLength(4);
-  expect(JSON.stringify(model.doGenerateCalls[2])).toContain("previousSummary");
+  expect(JSON.stringify(model.doGenerateCalls[2])).toContain("<prior-summary>");
+  expect(JSON.stringify(model.doGenerateCalls[0])).toContain("Create a new anchored summary");
+  expect(JSON.stringify(model.doGenerateCalls[2])).toContain("the conversation wins");
   expect(context.events.filter(e => e.type === "compaction-completed").every(e => Number(e.after) < Number(e.before))).toBe(true);
 });
 

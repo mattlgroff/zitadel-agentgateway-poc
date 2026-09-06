@@ -5,19 +5,27 @@ and recent-context window. It does not switch providers, models or strategies on
 
 ## Source precedent
 
-[Reviewed OpenCode algorithm, bbd72fb8](https://github.com/anomalyco/opencode/blob/bbd72fb8b0bb6de580d2041a0150016227c63ac0/packages/core/src/session/compaction.ts).
+[OpenCode V2 source, 7c2199d8](https://github.com/anomalyco/opencode/blob/7c2199d84a5830f70a8250731a42ff958145b4d6/packages/core/src/session/compaction.ts), verified against the dev branch on September 5, 2026.
 
-This is a small independent implementation inspired by the structure, not a vendored
-copy or a claim of identical behavior. Like that source, it estimates serialized
+The initial prompt, update instructions, complete Markdown template and prompt
+builder are copied verbatim into `opencode-v2-prompt.ts`, with the upstream MIT
+license. Summary requests have no additional system prompt and no tools, matching
+this revision. This is an adapter of the algorithm, not the entire OpenCode runtime.
+Like that source, it estimates serialized
 tokens, truncates large tool results in the summary projection, asks the selected
 model for a checkpoint using a fresh request, and carries the previous checkpoint
 forward on subsequent compactions. Original records remain intact.
 
-Differences: this PoC requires all four summary headings, fails explicitly rather
+Differences: this PoC validates all template headings, fails explicitly rather
 than attempting overflow recovery, uses a controlled smaller test budget, and
 stores receipts in JSON rather than integrating OpenCode's event system. The
 input is synthetic plain-text business history, not arbitrary media or provider
 reasoning blocks. Real tool execution remains outside this context manager.
+
+The pinned source defaults to an 8000-token recent tail and 20000-token buffer.
+The live test explicitly overrides these to 600 and 2400 inside an 8000-token
+controlled window. Published V2 documentation differs from this source revision;
+the linked executable source is the baseline, not a claim of release-wide parity.
 
 ## Run a real-model proof
 
@@ -46,7 +54,7 @@ asks the real model to continue. It then changes the destination, grows history
 again, compacts again and checks the updated answer against exact expected fields.
 No expected answers are supplied in the continuation prompt.
 
-`receipts/automatic-compaction/result.json` records pass/fail, request bodies,
+`receipts/automatic-compaction-v2/result.json` records pass/fail, request bodies,
 actual generated summaries and answers, provider response IDs, reported usage,
 latency, estimated before/after sizes, acceptance checks, original records and
 the executing commit. Failed runs also write receipts; a missing live receipt is
@@ -58,3 +66,6 @@ It is not a full-provider-window stress test, production concurrency benchmark,
 external-write idempotency test, or approval authorization test. The existing
 durable approval tests cover that separate local behavior. Unit tests use mocks
 and must never be represented as the real-model receipt.
+
+The earlier `receipts/automatic-compaction` run used a custom shortened prompt.
+It is retained as historical evidence and superseded by the V2-prompt run.
